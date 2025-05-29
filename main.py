@@ -1,12 +1,14 @@
 import tkinter as tk
+import os
 from tkinter import messagebox
 import mysql.connector
-from simulador import obtener_historial_texto, obtener_preguntas_practica, obtener_opciones, obtener_intentos_final, guardar_intento, guardar_respuesta, registrar_usuario, obtener_preguntas_final, obtener_datos_dashboard
-from dashboard import menu_dashboard
+from simulador import obtener_historial_texto, obtener_preguntas_practica, obtener_opciones, obtener_intentos_final, guardar_intento, guardar_respuesta, registrar_usuario, obtener_preguntas_final, obtener_datos_dashboard_usuario
+from dashboard import menu_dashboard, abrir_dashboard_personal
 from tkinter import ttk
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import matplotlib.pyplot as plt
 import pandas as pd
+from PIL import Image, ImageTk
 
 # Función de verificación de login
 def verificar_login(usuario, contraseña):
@@ -52,42 +54,57 @@ def abrir_menu_principal(id_usuario, nombre):
         ventana.destroy()
 
     def abrir_simulador_practica():
-        from simulador import obtener_preguntas_practica, obtener_opciones, guardar_intento, guardar_respuesta
+        from PIL import Image, ImageTk
 
-        sim = tk.Toplevel()
-        sim.title("Simulador de Práctica")
-        sim.geometry("500x400")
-
+        contador_var = tk.StringVar()
         tiempo_var = tk.StringVar()
         tiempo_restante = [60]
         tiempo_var.set("⏱️ Tiempo: 60s")
-
-        contador_var = tk.StringVar()
-        pregunta_var = tk.StringVar()
-        resultado_var = tk.StringVar()
         respuestas_guardadas = []
+
+        sim = tk.Toplevel()
+        sim.title("Simulador de Práctica")
+        sim.geometry("600x600")
+        sim.config(bg="#ecf0f1")
 
         preguntas = obtener_preguntas_practica()
         indice = {"actual": 0}
         puntuacion = {"total": 0}
+
+        pregunta_var = tk.StringVar()
+        resultado_var = tk.StringVar()
         botones_opciones = []
 
-        def actualizar_tiempo():
-            tiempo_restante[0] -= 1
-            tiempo_var.set(f"⏱️ Tiempo: {tiempo_restante[0]}s")
-            if tiempo_restante[0] <= 0:
-                tiempo_agotado()
-            else:
-                sim.after_id = sim.after(1000, actualizar_tiempo)
+        label_imagen = tk.Label(sim)
+        label_imagen.pack(pady=10)
+        # UI
+        tk.Label(sim, textvariable=tiempo_var, font=("Arial", 10, "bold"), bg="#ecf0f1", fg="#e74c3c").pack()
+        tk.Label(sim, textvariable=contador_var, font=("Arial", 11, "italic"), bg="#ecf0f1", fg="#7f8c8d").pack(pady=(10, 0))
+        tk.Label(sim, textvariable=pregunta_var, wraplength=450, font=("Arial", 14, "bold"), bg="#ecf0f1", fg="#2c3e50").pack(pady=10)
 
-        def tiempo_agotado():
-            resultado_var.set("⏰ Tiempo agotado. Respuesta incorrecta.")
-            pregunta = preguntas[indice["actual"]]
-            respuestas_guardadas.append((pregunta["id_pregunta"], 0, 0))
-            indice["actual"] += 1
-            for b in botones_opciones:
-                b.config(state="disabled")
-            sim.after(2000, cargar_pregunta)
+        frame_opciones = tk.LabelFrame(sim, text="Opciones", bg="#ecf0f1", fg="#34495e", font=("Arial", 12, "bold"))
+        frame_opciones.pack(pady=10, fill="both", expand=True)
+
+        tk.Button(sim, text="↩️ Volver al menú", command=sim.destroy, bg="#95a5a6", fg="white", font=("Arial", 10, "bold")).pack(pady=10)
+
+        for _ in range(4):
+            btn = tk.Button(frame_opciones, text="", width=50, bg="#3498db", fg="white", font=("Arial", 10, "bold"), relief="raised")
+            btn.pack(pady=5)
+            botones_opciones.append(btn)
+
+        tk.Label(sim, textvariable=resultado_var, font=("Arial", 12, "bold"), bg="#ecf0f1", fg="#27ae60").pack(pady=15)
+
+        def actualizar_imagen(nombre_archivo):
+            try:
+                ruta = os.path.join("imagenes", nombre_archivo)
+                img = Image.open(ruta)
+                img = img.resize((300, 180))
+                img_tk = ImageTk.PhotoImage(img)
+                label_imagen.configure(image=img_tk)
+                label_imagen.image = img_tk
+            except:
+                label_imagen.config(image='')
+                label_imagen.image = None
 
         def cargar_pregunta():
             resultado_var.set("")
@@ -101,9 +118,15 @@ def abrir_menu_principal(id_usuario, nombre):
             if indice["actual"] < len(preguntas):
                 pregunta = preguntas[indice["actual"]]
                 opciones = obtener_opciones(pregunta["id_pregunta"])
-                
                 contador_var.set(f"📍 Pregunta {indice['actual'] + 1} de {len(preguntas)}")
                 pregunta_var.set(f" {pregunta['pregunta']}")
+
+                if pregunta.get("imagen") and os.path.exists(os.path.join("imagenes", pregunta["imagen"])):
+                    actualizar_imagen(pregunta["imagen"])
+                else:
+                    label_imagen.config(image='')
+                    label_imagen.image = None
+
 
                 for i, boton in enumerate(botones_opciones):
                     if i < len(opciones):
@@ -117,17 +140,7 @@ def abrir_menu_principal(id_usuario, nombre):
                     else:
                         boton.config(text="", state="disabled")
             else:
-                pregunta_var.set("✅ Simulador completado.")
-                resultado_var.set(f"Tu puntuación: {puntuacion['total']}/100")
-                for b in botones_opciones:
-                    b.config(state="disabled")
-
-                id_examen = guardar_intento(id_usuario, "práctica", puntuacion["total"])
-                for id_preg, id_opc, correct in respuestas_guardadas:
-                    guardar_respuesta(id_examen, id_preg, id_opc, correct)
-
-                aprobado = "🎉 ¡Aprobado!" if puntuacion["total"] >= 75 else "📕 No aprobado."
-                messagebox.showinfo("Resultado Final", f"{aprobado}\nPuntuación: {puntuacion['total']}/100")
+                simular_terminado()
 
         def responder(boton):
             if hasattr(sim, "after_id"):
@@ -139,7 +152,6 @@ def abrir_menu_principal(id_usuario, nombre):
                 puntuacion["total"] += 5
             else:
                 resultado_var.set("❌ Incorrecto.")
-
             respuestas_guardadas.append((boton.id_pregunta, boton.id_opcion, int(correcta)))
 
             for b in botones_opciones:
@@ -147,30 +159,40 @@ def abrir_menu_principal(id_usuario, nombre):
             indice["actual"] += 1
             sim.after(1500, cargar_pregunta)
 
-        # UI Layout
-        tk.Label(sim, textvariable=tiempo_var, font=("Arial", 10)).pack()
-        tk.Label(sim, textvariable=contador_var, font=("Arial", 10, "italic")).pack(pady=(10, 0))
-        tk.Label(sim, textvariable=pregunta_var, wraplength=450, font=("Arial", 12)).pack(pady=10)
+        def tiempo_agotado():
+            resultado_var.set("⏰ Tiempo agotado. Respuesta incorrecta.")
+            pregunta = preguntas[indice["actual"]]
+            respuestas_guardadas.append((pregunta["id_pregunta"], 0, 0))
+            indice["actual"] += 1
+            for b in botones_opciones:
+                b.config(state="disabled")
+            sim.after(2000, cargar_pregunta)
 
-        for _ in range(4):
-            btn = tk.Button(sim, text="", width=50)
-            btn.pack(pady=5)
-            botones_opciones.append(btn)
+        def actualizar_tiempo():
+            tiempo_restante[0] -= 1
+            tiempo_var.set(f"⏱️ Tiempo: {tiempo_restante[0]}s")
+            if tiempo_restante[0] <= 0:
+                tiempo_agotado()
+            else:
+                sim.after_id = sim.after(1000, actualizar_tiempo)
+
+        def simular_terminado():
+            pregunta_var.set("✅ Simulador completado.")
+            resultado_var.set(f"Tu puntuación: {puntuacion['total']}/100")
+            for b in botones_opciones:
+                b.config(state="disabled")
+
+            id_examen = guardar_intento(id_usuario, "práctica", puntuacion["total"])
+            for id_preg, id_opc, correct in respuestas_guardadas:
+                guardar_respuesta(id_examen, id_preg, id_opc, correct)
 
         for boton in botones_opciones:
             boton.config(command=lambda b=boton: responder(b))
 
-        tk.Label(sim, textvariable=resultado_var, font=("Arial", 11, "bold")).pack(pady=20)
-
         cargar_pregunta()
+
         
     def abrir_simulador_final():
-        from simulador import obtener_preguntas_final, obtener_opciones, guardar_intento, guardar_respuesta, obtener_intentos_final
-
-        contador_var = tk.StringVar()
-        tiempo_var = tk.StringVar()
-        tiempo_var.set("⏱️ Tiempo: 60s")
-        tiempo_restante = [60]
 
         intentos = obtener_intentos_final(id_usuario)
         if intentos >= 3:
@@ -179,7 +201,13 @@ def abrir_menu_principal(id_usuario, nombre):
 
         sim = tk.Toplevel()
         sim.title("Simulador Final")
-        sim.geometry("500x400")
+        sim.geometry("600x600")
+        sim.config(bg="#ecf0f1")
+
+        contador_var = tk.StringVar()
+        tiempo_var = tk.StringVar()
+        tiempo_var.set("⏱️ Tiempo: 60s")
+        tiempo_restante = [60]
 
         preguntas = obtener_preguntas_final()
         indice = {"actual": 0}
@@ -189,6 +217,18 @@ def abrir_menu_principal(id_usuario, nombre):
         pregunta_var = tk.StringVar()
         resultado_var = tk.StringVar()
         botones_opciones = []
+
+        def actualizar_imagen(nombre_archivo):
+            try:
+                ruta = os.path.join("imagenes", nombre_archivo)
+                img = Image.open(ruta)
+                img = img.resize((300, 180))
+                img_tk = ImageTk.PhotoImage(img)
+                label_imagen.configure(image=img_tk)
+                label_imagen.image = img_tk
+            except:
+                label_imagen.config(image='')
+                label_imagen.image = None
 
         def actualizar_tiempo():
             tiempo_restante[0] -= 1
@@ -222,6 +262,13 @@ def abrir_menu_principal(id_usuario, nombre):
 
                 contador_var.set(f"📍 Pregunta {indice['actual'] + 1} de {len(preguntas)}")
                 pregunta_var.set(f" {pregunta['pregunta']}")
+
+                if pregunta.get("imagen") and os.path.exists(os.path.join("imagenes", pregunta["imagen"])):
+                    actualizar_imagen(pregunta["imagen"])
+                else:
+                    label_imagen.config(image='')
+                    label_imagen.image = None
+
 
                 for i, boton in enumerate(botones_opciones):
                     if i < len(opciones):
@@ -267,13 +314,20 @@ def abrir_menu_principal(id_usuario, nombre):
             aprobado = "🎉 ¡Aprobado!" if puntuacion["total"] >= 75 else "📕 No aprobado."
             messagebox.showinfo("Resultado Final", f"{aprobado}\nPuntuación: {puntuacion['total']}/100")
 
-        # UI Layout
-        tk.Label(sim, textvariable=tiempo_var, font=("Arial", 10)).pack()
+        # UI
+        tk.Label(sim, textvariable=tiempo_var, font=("Arial", 10, "bold"), bg="#ecf0f1", fg="#e74c3c").pack()
         tk.Label(sim, textvariable=contador_var, font=("Arial", 10, "italic")).pack(pady=(10, 0))
+
+        label_imagen = tk.Label(sim)
+        label_imagen.pack(pady=10)
+
         tk.Label(sim, textvariable=pregunta_var, wraplength=450, font=("Arial", 12)).pack(pady=10)
 
+        frame_opciones = tk.LabelFrame(sim, text="Opciones", bg="#ecf0f1", fg="#34495e", font=("Arial", 12, "bold"))
+        frame_opciones.pack(pady=10, fill="both", expand=True)
+
         for _ in range(4):
-            btn = tk.Button(sim, text="", width=50)
+            btn = tk.Button(frame_opciones, text="", width=50, bg="#3498db", fg="white", font=("Arial", 10, "bold"), relief="raised")
             btn.pack(pady=5)
             botones_opciones.append(btn)
 
@@ -283,9 +337,11 @@ def abrir_menu_principal(id_usuario, nombre):
         for boton in botones_opciones:
             boton.config(command=crear_callback(boton))
 
-        tk.Label(sim, textvariable=resultado_var, font=("Arial", 11, "bold")).pack(pady=20)
+        tk.Label(sim, textvariable=resultado_var, font=("Arial", 12, "bold"), bg="#ecf0f1", fg="#27ae60").pack(pady=15)
+        tk.Button(sim, text="↩️ Volver al menú", command=sim.destroy, bg="#95a5a6", fg="white", font=("Arial", 10, "bold")).pack(pady=10)
 
         cargar_pregunta()
+
 
     def ver_historial():
         historial = obtener_historial_texto(id_usuario)
@@ -310,7 +366,7 @@ def abrir_menu_principal(id_usuario, nombre):
     tk.Button(ventana, text="🧪 Simulador de Práctica", width=25, command=abrir_simulador_practica).pack(pady=5)
     tk.Button(ventana, text="📘 Simulador Final", width=25, command=abrir_simulador_final).pack(pady=5)
     tk.Button(ventana, text="📚 Ver Historial", width=25, command=ver_historial).pack(pady=5)
-    tk.Button(ventana, text="📊 Ver Dashboard", width=25, command=ver_dashboard).pack(pady=5)
+    tk.Button(ventana, text="📊 Dashboard Personal", width=25, command=lambda: abrir_dashboard_personal(id_usuario)).pack(pady=5)
     tk.Button(ventana, text="🌀 Cerrar sesión", width=25, command=cerrar_sesion).pack(pady=5)
     tk.Button(ventana, text="🚪 Salir", width=25, command=ventana.destroy).pack(pady=20)
 
@@ -355,7 +411,7 @@ def abrir_ventana_registro():
     tk.Button(reg, text="Registrarse", command=registrar).pack(pady=15)
 
 def mostrar_dashboard(tipo):
-    datos = obtener_datos_dashboard(tipo)
+    datos = obtener_datos_dashboard_usuario(tipo)
     if not datos:
         messagebox.showinfo("Sin datos", "No hay datos disponibles para este tipo de examen.")
         return

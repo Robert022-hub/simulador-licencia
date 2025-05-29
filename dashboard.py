@@ -1,6 +1,11 @@
 import mysql.connector
 import pandas as pd
 import matplotlib.pyplot as plt
+import tkinter as tk
+from PIL import Image, ImageTk
+import matplotlib.pyplot as plt
+from io import BytesIO
+from simulador import obtener_datos_dashboard_usuario
 
 # Conexión y carga de datos
 def obtener_dataframe():
@@ -113,6 +118,38 @@ def menu_dashboard():
             break
         else:
             print("❌ Opción inválida.")
+
+def abrir_dashboard_personal(id_usuario):
+    datos = obtener_datos_dashboard_usuario(id_usuario)  # Debe devolver tipo, total, total_puntos
+
+    # Preparar datos
+    tipos = [d["tipo"].capitalize() for d in datos]
+    promedios = [d["total_puntos"] / d["total"] for d in datos]
+
+    fig, ax = plt.subplots(figsize=(5, 4))
+    bars = ax.bar(tipos, promedios, color=["#3498db", "#e67e22"])
+    ax.set_title("Promedio de Puntuación por Tipo de Examen")
+    ax.set_ylabel("Puntuación Promedio / 100")
+    for bar, avg in zip(bars, promedios):
+        ax.annotate(f'{avg:.1f}', xy=(bar.get_x() + bar.get_width() / 2, bar.get_height()),
+                    xytext=(0, 3), textcoords="offset points", ha='center', va='bottom')
+
+    buf = BytesIO()
+    plt.tight_layout()
+    plt.savefig(buf, format="png")
+    buf.seek(0)
+    plt.close(fig)
+
+    ventana = tk.Toplevel()
+    ventana.title("📊 Dashboard Personal")
+    ventana.config(bg="#ecf0f1")
+    ventana.geometry("600x500")
+
+    img = Image.open(buf)
+    img_tk = ImageTk.PhotoImage(img)
+
+    tk.Label(ventana, image=img_tk, bg="#ecf0f1").pack(pady=10)
+    ventana.mainloop()
 
 # Arranque
 if __name__ == "__main__":

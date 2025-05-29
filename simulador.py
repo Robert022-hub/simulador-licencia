@@ -320,22 +320,20 @@ def obtener_preguntas_final():
     conexion.close()
     return seleccionadas
 
-def obtener_datos_dashboard(tipo):
+def obtener_datos_dashboard_usuario(id_usuario):
     conexion = mysql.connector.connect(
         host="localhost",
         user="root",
         password="root",
         database="simulador_examen"
     )
-    cursor = conexion.cursor()
-
-    cursor.execute(f"""
-        SELECT u.nombre_usuario, COUNT(e.id_examen), AVG(e.puntuacion)
-        FROM Usuarios u
-        JOIN Examenes e ON u.id_usuario = e.id_usuario
-        WHERE e.tipo_examen = %s
-        GROUP BY u.id_usuario
-    """, (tipo,))
+    cursor = conexion.cursor(dictionary=True)
+    cursor.execute("""
+        SELECT tipo_examen AS tipo, COUNT(*) as total, SUM(puntuacion) as total_puntos
+        FROM examenes
+        WHERE id_usuario = %s
+        GROUP BY tipo_examen
+    """, (id_usuario,))
     
     datos = cursor.fetchall()
     cursor.close()
